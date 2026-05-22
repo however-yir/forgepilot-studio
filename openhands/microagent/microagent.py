@@ -102,7 +102,7 @@ class BaseMicroagent(BaseModel):
             metadata_dict['version'] = str(metadata_dict['version'])
 
         try:
-            metadata = MicroagentMetadata(**metadata_dict)
+            metadata = MicroagentMetadata.model_validate(metadata_dict)
 
             # Validate MCP tools configuration if present
             if metadata.mcp_tools:
