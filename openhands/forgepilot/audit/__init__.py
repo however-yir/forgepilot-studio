@@ -11,6 +11,7 @@ from .schema import (
     export_audit_events_jsonl,
     ordered_timeline,
 )
+from .replay import AuditReplaySummary, ReplayRiskQueue, build_audit_replay_summary
 from .timeline import (
     AuditTimeline,
     TimelineChain,
@@ -34,6 +35,9 @@ __all__ = [
     'export_audit_events_jsonl',
     'export_audit_events_csv',
     'build_task_evidence_pack',
+    'ReplayRiskQueue',
+    'AuditReplaySummary',
+    'build_audit_replay_summary',
     'audit_events_from_event_stream',
     'TimelineNode',
     'TimelineLink',
