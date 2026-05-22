@@ -28,6 +28,7 @@ def test_registry_from_templates_exposes_entries():
     tool_ids = [entry.tool_id for entry in registry.list_entries()]
     assert 'connector.github' in tool_ids
     assert 'connector.sentry' in tool_ids
+    assert registry.get_entry('connector.github').permission_scopes == ('confirm',)
 
 
 def test_health_check_detects_missing_credentials():
@@ -87,6 +88,17 @@ def test_invoke_uses_mock_response_when_present():
     )
     assert record.output_summary == 'mock-check-result'
     assert record.duration_ms == 55
+
+
+def test_registry_previews_schema_and_permission_scopes():
+    registry = ToolRegistry.from_builtin_templates()
+    registry.set_enabled('connector.github', False)
+    registry.set_permission_scopes('connector.github', ('repo:read', 'checks:read'))
+
+    preview = registry.preview_schema('connector.github')
+    assert preview['enabled'] is False
+    assert preview['permission_scopes'] == ['repo:read', 'checks:read']
+    assert preview['schema_ref'] is not None
 
 
 def test_invoke_requires_executor_when_live_mode():

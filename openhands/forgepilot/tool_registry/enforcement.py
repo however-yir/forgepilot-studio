@@ -302,6 +302,11 @@ def _entry_to_json_schema(entry: ToolRegistryEntry) -> dict[str, Any]:
                 'enum': [p.value for p in ToolPermission],
                 'default': entry.permission.value,
             },
+            'permission_scopes': {
+                'type': 'array',
+                'items': {'type': 'string'},
+                'default': list(entry.permission_scopes),
+            },
             'enabled': {'type': 'boolean', 'default': entry.enabled},
             'mode': {
                 'type': 'string',

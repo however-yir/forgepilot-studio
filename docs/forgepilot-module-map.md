@@ -6,8 +6,8 @@
 
 | 模块 | 职责 | 当前证据 |
 | --- | --- | --- |
-| `control_plane` | 定义任务协议、阶段流转、验收标准、变更边界、执行策略和默认验证命令。 | `TaskSpec`、`TaskExecutionPolicy`、`select_verification_commands()`、`validate_phase_sequence()` |
-| `audit` | 定义审计事件、排序、JSONL/CSV 导出和审计时间线构建。 | `AuditEvent`、`AuditEventType`、`build_timeline()` |
+| `control_plane` | 定义任务协议、阶段流转、验收标准、变更边界、执行策略、审批策略、预算策略和默认验证命令。 | `TaskSpec`、`ApprovalPolicy`、`BudgetPolicy`、`select_verification_commands()` |
+| `audit` | 定义审计事件、排序、JSONL/CSV 导出、task evidence pack 和审计时间线构建。 | `AuditEvent`、`AuditEventType`、`build_task_evidence_pack()`、`build_timeline()` |
 | `tool_registry` | 管理 MCP/HTTP/shell 工具元数据、权限、mock、健康状态、schema、调用记录和输出摘要。 | `ToolRegistry`、`ToolAccessGuard`、`execute_shell_tool()` |
 | `teamspace` | 建模个人/团队/共享模板空间，提供角色权限矩阵和空间注册表。 | `TeamSpace`、`SpaceRole`、`SpacePermissionGuard` |
 | `llm_gateway` | 识别模型供应商前缀，统一 OpenAI、Anthropic、Ollama、LiteLLM、ForgePilot Gateway 的路由口径。 | `LLMGatewayProvider`、`detect_provider()` |
@@ -22,7 +22,9 @@
 | --- | --- |
 | 控制平面 | `tests/unit/forgepilot/test_task_protocol.py` |
 | 审计事件导出 | `tests/unit/forgepilot/test_audit_schema.py` |
+| 真实事件流转审计事件 | `tests/unit/forgepilot/test_audit_event_stream.py` |
 | 审计时间线 | `tests/unit/forgepilot/test_audit_timeline.py` |
+| 审批与预算策略 | `tests/unit/forgepilot/test_approval_budget_policy.py` |
 | 工具注册表 schema | `tests/unit/forgepilot/test_tool_registry_schema.py` |
 | 工具注册表运行时 | `tests/unit/forgepilot/test_tool_registry_runtime.py` |
 | shell 工具封装 | `tests/unit/forgepilot/test_shell_tools.py` |
@@ -44,6 +46,8 @@
 - [x] 同阶段重试允许。
 - [x] 不允许跳过中间阶段。
 - [x] 完整 `plan -> execute -> verify -> report` 序列有效。
+- [x] 高风险命令、外部网络、部署命令、敏感文件修改会进入审批策略。
+- [x] 超预算策略支持提示、降级模型、暂停并要求审批。
 - [ ] `TaskSpec` 序列化快照测试，防止字段命名漂移。
 - [ ] `ChangeBoundary` 与文件编辑工具的集成测试。
 - [ ] `readonly_research_mode`、`review_mode`、`handoff_mode` 与 controller 行为的集成测试。
@@ -54,7 +58,7 @@
 - [x] JSONL 导出包含 trace、event_type、payload。
 - [x] CSV 导出包含 payload 字段。
 - [x] timeline 能串联 model、command、file_change、verification。
-- [ ] 将真实 event stream 转换为 `AuditEvent` 的集成测试。
+- [x] 将真实 event stream 转换为 `AuditEvent` 的集成测试。
 - [ ] 多轮 self-heal 的 timeline 分链测试。
 - [ ] 审计导出脱敏测试。
 - [ ] 大 payload 截断和摘要测试。

@@ -52,6 +52,38 @@ export interface ToolCallCard {
   error: string | null;
 }
 
+export interface AuditReplayEvent {
+  id: string;
+  eventType: string;
+  phase: WorkflowStage;
+  time: string;
+  summary: string;
+  payload: Record<string, string | number | boolean>;
+}
+
+export interface ToolRegistryPanelItem {
+  id: string;
+  name: string;
+  enabled: boolean;
+  permission: string;
+  scopes: string[];
+  schemaPreview: string;
+  connection: string;
+  mockResponse: string;
+}
+
+export interface BudgetPolicyPanelItem {
+  threshold: string;
+  action: string;
+  detail: string;
+}
+
+export interface ApprovalPolicyPanelItem {
+  rule: string;
+  reason: string;
+  sample: string;
+}
+
 export interface WorkbenchPageConfig {
   eyebrow: string;
   title: string;
@@ -70,6 +102,11 @@ export interface WorkbenchPageConfig {
   secondaryTitle: string;
   secondaryItems: WorkbenchItem[];
   toolCalls?: ToolCallCard[];
+  auditReplayEvents?: AuditReplayEvent[];
+  auditExportJsonl?: string;
+  toolRegistryItems?: ToolRegistryPanelItem[];
+  budgetPolicies?: BudgetPolicyPanelItem[];
+  approvalPolicies?: ApprovalPolicyPanelItem[];
 }
 
 export const TASK_STATE_STYLES: Record<TaskState, string> = {
@@ -283,6 +320,42 @@ export const workbenchPages: Record<string, WorkbenchPageConfig> = {
         error: "401 Unauthorized: token scope missing `audit:write`",
       },
     ],
+    toolRegistryItems: [
+      {
+        id: "connector.github",
+        name: "GitHub",
+        enabled: true,
+        permission: "confirm",
+        scopes: ["repo:read", "checks:read", "pull_request:write"],
+        schemaPreview:
+          '{"tool_id":"connector.github","permission":"confirm","mode":"live"}',
+        connection: "healthy",
+        mockResponse:
+          '{"checks":[{"name":"frontend-build","status":"success"}]}',
+      },
+      {
+        id: "connector.sentry",
+        name: "Sentry",
+        enabled: true,
+        permission: "read",
+        scopes: ["issue:read", "event:read"],
+        schemaPreview:
+          '{"tool_id":"connector.sentry","permission":"read","mode":"mock"}',
+        connection: "healthy",
+        mockResponse: '{"issue":"FP-2381","level":"error"}',
+      },
+      {
+        id: "internal.http.invoke",
+        name: "Internal HTTP API",
+        enabled: false,
+        permission: "execute",
+        scopes: ["audit:write"],
+        schemaPreview:
+          '{"tool_id":"internal.http.invoke","method":"POST","path":"/v1/exports"}',
+        connection: "unreachable",
+        mockResponse: '{"error":"token scope missing audit:write"}',
+      },
+    ],
   },
   audit: {
     eyebrow: "Audit Replay",
@@ -319,6 +392,58 @@ export const workbenchPages: Record<string, WorkbenchPageConfig> = {
       { title: "CSV", detail: "适合安全审计和成本复盘。" },
       { title: "Report Link", detail: "适合 PR 或交付记录。" },
     ],
+    auditReplayEvents: [
+      {
+        id: "audit-task-created",
+        eventType: "task_created",
+        phase: "plan",
+        time: "09:31:04",
+        summary: "创建任务：修复 login 模块空指针异常。",
+        payload: { task_id: "task-login-42", owner: "platform-team" },
+      },
+      {
+        id: "audit-model-response",
+        eventType: "model_response",
+        phase: "execute",
+        time: "09:31:18",
+        summary: "模型定位 user.profile 未初始化并提出最小修改范围。",
+        payload: { model: "openai/gpt-4.1", tokens: 1824 },
+      },
+      {
+        id: "audit-command-run",
+        eventType: "command_run",
+        phase: "execute",
+        time: "09:32:02",
+        summary: "运行 pytest tests/unit/test_login.py。",
+        payload: { command: "pytest tests/unit/test_login.py", exit_code: 0 },
+      },
+      {
+        id: "audit-file-change",
+        eventType: "file_change",
+        phase: "execute",
+        time: "09:32:26",
+        summary: "auth/login_service.py +12 / -3。",
+        payload: { path: "auth/login_service.py", additions: 12, deletions: 3 },
+      },
+      {
+        id: "audit-test-result",
+        eventType: "test_result",
+        phase: "verify",
+        time: "09:33:10",
+        summary: "12 passed / 0 failed / 1 skipped。",
+        payload: { verifier: "pytest", passed: true },
+      },
+      {
+        id: "audit-approval",
+        eventType: "approval_decision",
+        phase: "report",
+        time: "09:33:44",
+        summary: "Reviewer 批准导出 evidence pack。",
+        payload: { decision: "approved", reviewer: "release-owner" },
+      },
+    ],
+    auditExportJsonl:
+      '{"trace_id":"audit-task-created","task_id":"task-login-42","event_type":"task_created","phase":"plan"}\n{"trace_id":"audit-model-response","task_id":"task-login-42","event_type":"model_response","phase":"execute"}\n{"trace_id":"audit-test-result","task_id":"task-login-42","event_type":"test_result","phase":"verify"}',
   },
   cost: {
     eyebrow: "Cost & Budget",
@@ -354,6 +479,23 @@ export const workbenchPages: Record<string, WorkbenchPageConfig> = {
       { title: "warn", detail: "接近阈值时提示。" },
       { title: "pause", detail: "暂停并等待人工确认。" },
       { title: "block", detail: "超过硬上限直接阻断。" },
+    ],
+    budgetPolicies: [
+      {
+        threshold: "80%",
+        action: "warn",
+        detail: "预算接近上限时在任务台和会话面板提示。",
+      },
+      {
+        threshold: "95%",
+        action: "downgrade_model",
+        detail: "后续步骤切换到 gpt-4.1-mini 或团队配置的低成本模型。",
+      },
+      {
+        threshold: "100%",
+        action: "pause + require_approval",
+        detail: "暂停执行，记录 approval_requested，等待负责人批准继续。",
+      },
     ],
   },
   team: {
@@ -465,6 +607,28 @@ export const workbenchPages: Record<string, WorkbenchPageConfig> = {
       { title: "review", detail: "需要说明和确认。" },
       { title: "danger", detail: "默认要求人工审核。" },
       { title: "blocked", detail: "默认禁止执行。" },
+    ],
+    approvalPolicies: [
+      {
+        rule: "高风险命令",
+        reason: "high_risk_command",
+        sample: "sudo rm -rf /tmp/build-cache",
+      },
+      {
+        rule: "外部网络",
+        reason: "external_network",
+        sample: "curl https://example.com/install.sh",
+      },
+      {
+        rule: "部署命令",
+        reason: "deployment_command",
+        sample: "kubectl apply -f prod.yaml",
+      },
+      {
+        rule: "敏感文件修改",
+        reason: "sensitive_file_change",
+        sample: "config/.env.production",
+      },
     ],
   },
   delivery: {

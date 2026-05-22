@@ -39,6 +39,25 @@ def test_build_timeline_creates_chains():
     assert timeline.total_cost_usd == 0.0
 
 
+def test_build_timeline_links_unified_audit_event_types():
+    now = datetime.now(UTC)
+    events = [
+        _make_event('e1', AuditEventType.MODEL_RESPONSE, timestamp=now),
+        _make_event('e2', AuditEventType.COMMAND_RUN, timestamp=now),
+        _make_event('e3', AuditEventType.FILE_CHANGE, timestamp=now),
+        _make_event('e4', AuditEventType.TEST_RESULT, timestamp=now),
+    ]
+
+    timeline = build_timeline(events)
+    chain_nodes = timeline.chains[0].nodes
+    assert [node.event.event_type for node in chain_nodes] == [
+        AuditEventType.MODEL_RESPONSE,
+        AuditEventType.COMMAND_RUN,
+        AuditEventType.FILE_CHANGE,
+        AuditEventType.TEST_RESULT,
+    ]
+
+
 def test_build_timeline_empty_events():
     timeline = build_timeline([])
     assert timeline.chains == []

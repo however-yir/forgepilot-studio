@@ -61,11 +61,13 @@ class AuditTimeline(BaseModel):
 
 
 _CORRELATION_WINDOW_MS = 5000  # events within this window may be causally linked
+_MODEL_EVENT_TYPES = {AuditEventType.MODEL, AuditEventType.MODEL_RESPONSE}
+_COMMAND_EVENT_TYPES = {AuditEventType.COMMAND, AuditEventType.COMMAND_RUN}
+_VERIFICATION_EVENT_TYPES = {AuditEventType.VERIFICATION, AuditEventType.TEST_RESULT}
 
 
 def _find_preceding(
     event: AuditEvent,
-    events_by_trace: dict[str, AuditEvent],
     recent_events: list[AuditEvent],
 ) -> list[str]:
     """Find preceding events that likely caused this event."""
@@ -75,21 +77,22 @@ def _find_preceding(
         if delta < 0 or delta > _CORRELATION_WINDOW_MS:
             continue
         # model responses trigger commands and tool calls
-        if prev.event_type == AuditEventType.MODEL and event.event_type in {
+        if prev.event_type in _MODEL_EVENT_TYPES and event.event_type in {
+            AuditEventType.COMMAND_RUN,
             AuditEventType.COMMAND,
             AuditEventType.TOOL_CALL,
         }:
             parents.append(prev.trace_id)
         # commands produce file changes
         elif (
-            prev.event_type == AuditEventType.COMMAND
+            prev.event_type in _COMMAND_EVENT_TYPES
             and event.event_type == AuditEventType.FILE_CHANGE
         ):
             parents.append(prev.trace_id)
         # verifications follow commands
         elif (
-            prev.event_type == AuditEventType.COMMAND
-            and event.event_type == AuditEventType.VERIFICATION
+            prev.event_type in _COMMAND_EVENT_TYPES
+            and event.event_type in _VERIFICATION_EVENT_TYPES
         ):
             parents.append(prev.trace_id)
     return parents
@@ -106,7 +109,6 @@ def build_timeline(events: Iterable[AuditEvent]) -> AuditTimeline:
         return AuditTimeline(task_id='', chains=[], summary='No events recorded.')
 
     task_id = sorted_events[0].task_id or ''
-    {e.trace_id: e for e in sorted_events}
 
     # Build nodes with parent-child relationships
     nodes_by_trace: dict[str, TimelineNode] = {}
@@ -117,7 +119,7 @@ def build_timeline(events: Iterable[AuditEvent]) -> AuditTimeline:
         parents: list[str] = []
         chain_label = ''
 
-        if event.event_type == AuditEventType.COMMAND:
+        if event.event_type in _COMMAND_EVENT_TYPES:
             for prev in reversed(recent_model):
                 delta = (event.timestamp - prev.timestamp).total_seconds() * 1000
                 if 0 <= delta <= _CORRELATION_WINDOW_MS:
@@ -130,14 +132,14 @@ def build_timeline(events: Iterable[AuditEvent]) -> AuditTimeline:
                 if 0 <= delta <= _CORRELATION_WINDOW_MS:
                     parents.append(prev.trace_id)
                     break
-        elif event.event_type == AuditEventType.VERIFICATION:
+        elif event.event_type in _VERIFICATION_EVENT_TYPES:
             for prev in reversed(recent_command):
                 delta = (event.timestamp - prev.timestamp).total_seconds() * 1000
                 if 0 <= delta <= _CORRELATION_WINDOW_MS:
                     parents.append(prev.trace_id)
                     chain_label = 'verify'
                     break
-        elif event.event_type == AuditEventType.MODEL:
+        elif event.event_type in _MODEL_EVENT_TYPES:
             recent_model.append(event)
         elif event.event_type == AuditEventType.TOOL_CALL:
             for prev in reversed(recent_model):

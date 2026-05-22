@@ -46,6 +46,8 @@ def test_audit_public_contract():
         'ordered_timeline',
         'export_audit_events_jsonl',
         'export_audit_events_csv',
+        'build_task_evidence_pack',
+        'audit_events_from_event_stream',
         'AuditTimeline',
         'build_timeline',
     }

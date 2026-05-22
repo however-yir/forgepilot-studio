@@ -27,6 +27,7 @@ def test_tool_registry_entry_defaults():
 
     assert entry.enabled is True
     assert entry.permission == ToolPermission.READ
+    assert entry.permission_scopes == ()
     assert entry.mode == ToolExecutionMode.LIVE
     assert entry.cost.total_cost_usd == 0.0
 

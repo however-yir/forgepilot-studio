@@ -166,6 +166,7 @@ class ToolRegistry:
                 display_name=template.display_name,
                 provider=template.provider,
                 permission=template.default_permission,
+                permission_scopes=(template.default_permission.value,),
                 schema_ref=ToolSchemaRef(location=template.schema_location),
             )
             for template in BUILTIN_CONNECTOR_TEMPLATES
@@ -194,6 +195,15 @@ class ToolRegistry:
     ) -> ToolRegistryEntry:
         entry = self.get_entry(tool_id)
         entry.permission = permission
+        return entry
+
+    def set_permission_scopes(
+        self,
+        tool_id: str,
+        scopes: tuple[str, ...],
+    ) -> ToolRegistryEntry:
+        entry = self.get_entry(tool_id)
+        entry.permission_scopes = scopes
         return entry
 
     def set_mode(
@@ -308,6 +318,19 @@ class ToolRegistry:
         if tool_id is None:
             return list(self._call_records)
         return [record for record in self._call_records if record.tool_id == tool_id]
+
+    def preview_schema(self, tool_id: str) -> dict[str, object]:
+        entry = self.get_entry(tool_id)
+        return {
+            'tool_id': entry.tool_id,
+            'display_name': entry.display_name,
+            'provider': entry.provider,
+            'enabled': entry.enabled,
+            'permission': entry.permission.value,
+            'permission_scopes': list(entry.permission_scopes),
+            'mode': entry.mode.value,
+            'schema_ref': entry.schema_ref.model_dump() if entry.schema_ref else None,
+        }
 
     def run_health_check(
         self,

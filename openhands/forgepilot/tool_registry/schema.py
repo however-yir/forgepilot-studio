@@ -59,6 +59,7 @@ class ToolRegistryEntry(BaseModel):
     provider: str
     enabled: bool = True
     permission: ToolPermission = ToolPermission.READ
+    permission_scopes: tuple[str, ...] = ()
     mode: ToolExecutionMode = ToolExecutionMode.LIVE
     schema_ref: ToolSchemaRef | None = None
     health_check: ToolHealthCheck | None = None

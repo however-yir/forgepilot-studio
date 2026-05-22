@@ -55,7 +55,9 @@ ForgePilot Studio 把”创建任务 → 执行命令 → 修改代码 → 验�
   </tr>
 </table>
 
-![Demo](docs/assets/screenshots/demo.gif)
+### 任务回放 GIF
+
+![ForgePilot 任务回放 GIF](docs/assets/screenshots/demo.gif)
 
 关键文档：
 

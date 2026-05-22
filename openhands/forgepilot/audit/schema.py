@@ -11,6 +11,12 @@ from pydantic import BaseModel, Field
 
 
 class AuditEventType(str, Enum):
+    TASK_CREATED = 'task_created'
+    MODEL_RESPONSE = 'model_response'
+    COMMAND_RUN = 'command_run'
+    TEST_RESULT = 'test_result'
+    APPROVAL_REQUESTED = 'approval_requested'
+    APPROVAL_DECISION = 'approval_decision'
     MODEL = 'model'
     COMMAND = 'command'
     FILE_CHANGE = 'file_change'
@@ -41,6 +47,31 @@ class AuditEvent(BaseModel):
             'duration_ms': self.duration_ms or '',
             'cost_usd': self.cost_usd if self.cost_usd is not None else '',
             'payload': self.payload,
+        }
+
+
+class TaskEvidencePack(BaseModel):
+    task_id: str
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    event_count: int
+    event_types: list[str]
+    audit_jsonl: str
+    first_event_at: datetime | None = None
+    last_event_at: datetime | None = None
+
+    def model_dump_for_export(self) -> dict[str, Any]:
+        return {
+            'task_id': self.task_id,
+            'generated_at': self.generated_at.isoformat(),
+            'event_count': self.event_count,
+            'event_types': self.event_types,
+            'first_event_at': self.first_event_at.isoformat()
+            if self.first_event_at
+            else '',
+            'last_event_at': self.last_event_at.isoformat()
+            if self.last_event_at
+            else '',
+            'audit_jsonl': self.audit_jsonl,
         }
 
 
@@ -80,3 +111,26 @@ def export_audit_events_csv(events: Iterable[AuditEvent]) -> str:
         writer.writerow(row)
 
     return output.getvalue()
+
+
+def build_task_evidence_pack(
+    events: Iterable[AuditEvent],
+    *,
+    task_id: str | None = None,
+) -> TaskEvidencePack:
+    timeline = ordered_timeline(events)
+    if task_id:
+        inferred_task_id = task_id
+    else:
+        inferred_task_id = next(
+            (event.task_id or '' for event in timeline if event.task_id),
+            '',
+        )
+    return TaskEvidencePack(
+        task_id=inferred_task_id,
+        event_count=len(timeline),
+        event_types=sorted({event.event_type.value for event in timeline}),
+        first_event_at=timeline[0].timestamp if timeline else None,
+        last_event_at=timeline[-1].timestamp if timeline else None,
+        audit_jsonl=export_audit_events_jsonl(timeline),
+    )

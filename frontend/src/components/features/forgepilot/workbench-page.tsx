@@ -50,9 +50,15 @@ export function WorkbenchPage({ config }: WorkbenchPageProps) {
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [demoTaskStarted, setDemoTaskStarted] = useState(false);
   const [verifyStarted, setVerifyStarted] = useState(false);
+  const [registryEnabledById, setRegistryEnabledById] = useState<
+    Record<string, boolean>
+  >({});
 
   const isTaskConsole = config.title === "任务台";
   const isAuditReplay = config.title === "审计回放";
+  const isToolRegistry = config.title === "工具中心";
+  const isCostBudget = config.title === "成本与预算";
+  const isPolicy = config.title === "执行策略";
 
   useEffect(() => {
     if (!config.onboardingNotice || typeof window === "undefined") {
@@ -64,6 +70,18 @@ export function WorkbenchPage({ config }: WorkbenchPageProps) {
       "done";
     setShowOnboardingNotice(!completed);
   }, [config.onboardingNotice]);
+
+  useEffect(() => {
+    if (!config.toolRegistryItems) {
+      setRegistryEnabledById({});
+      return;
+    }
+    setRegistryEnabledById(
+      Object.fromEntries(
+        config.toolRegistryItems.map((item) => [item.id, item.enabled]),
+      ),
+    );
+  }, [config.toolRegistryItems]);
 
   const filteredItems = useMemo(
     () =>
@@ -111,6 +129,13 @@ export function WorkbenchPage({ config }: WorkbenchPageProps) {
     setDemoTaskStarted(true);
     setVerifyStarted(false);
     window.setTimeout(() => setVerifyStarted(true), 900);
+  };
+
+  const toggleRegistryItem = (toolId: string) => {
+    setRegistryEnabledById((previous) => ({
+      ...previous,
+      [toolId]: !previous[toolId],
+    }));
   };
 
   return (
@@ -385,44 +410,183 @@ ${verifyStarted ? "12 passed / 0 failed / 1 skipped" : "collecting ... running t
 
       {isAuditReplay ? (
         <section className="border-b border-white/10 bg-[#101417] px-5 py-5 md:px-8">
-          <h2 className="text-sm font-semibold uppercase tracking-normal text-[#dce7eb]">
-            login 修复任务时间线
-          </h2>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-normal text-[#dce7eb]">
+                login 修复任务时间线
+              </h2>
+              <p className="mt-1 text-sm text-[#93a2a8]">
+                task_created、model_response、command_run、file_change、test_result
+                和审批事件汇入同一个 evidence pack。
+              </p>
+            </div>
+            <a
+              data-testid="audit-jsonl-export"
+              href={`data:application/x-ndjson;charset=utf-8,${encodeURIComponent(
+                config.auditExportJsonl ?? "",
+              )}`}
+              download="task-login-42-audit.jsonl"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-[#2dd4bf]/50 bg-[#2dd4bf]/15 px-4 text-sm font-semibold text-[#dffdf7] hover:bg-[#2dd4bf]/25"
+            >
+              导出 audit JSONL
+            </a>
+          </div>
           <div className="mt-4 grid gap-3">
-            {[
-              ["模型响应", "识别 login 模块空指针来自 user.profile 未初始化。"],
-              ["命令执行", "git checkout -b fix/login-npe"],
-              ["文件修改", "auth/login_service.py +12 / -3"],
-              ["工具调用", "bash, file_edit, bash"],
-              ["验证结果", "12 passed / 0 failed / 1 skipped"],
-            ].map(([title, detail], index) => (
+            {config.auditReplayEvents?.map((event, index) => (
               <details
-                key={title}
-                open={index === 0 || index === 4}
+                key={event.id}
+                open={index === 0 || event.eventType === "test_result"}
+                data-testid={`audit-replay-event-${event.eventType}`}
                 className="rounded-md border border-white/10 bg-[#151b1f] p-3"
               >
-                <summary className="cursor-pointer text-sm font-semibold text-white">
-                  {title}
-                  {" -> "}
-                  {detail}
+                <summary className="grid cursor-pointer gap-2 text-sm text-white md:grid-cols-[100px_150px_minmax(0,1fr)] md:items-center">
+                  <span className="font-mono text-xs text-[#8ee8d9]">
+                    {event.time}
+                  </span>
+                  <StatusPill
+                    label={event.eventType}
+                    className={TASK_STATE_STYLES.running}
+                  />
+                  <span className="font-semibold">{event.summary}</span>
                 </summary>
-                <pre className="mt-3 overflow-x-auto rounded bg-[#0c1113] p-3 text-xs leading-6 text-[#c8d5da]">
-                  {JSON.stringify(
-                    {
-                      event: title,
-                      task: "修复 login 模块空指针异常",
-                      status: index === 4 ? "verified" : "recorded",
-                      input: detail,
-                      output:
-                        index === 4
-                          ? "pytest tests/unit/test_login.py: 12 passed / 0 failed / 1 skipped"
-                          : "recorded in audit timeline",
-                    },
-                    null,
-                    2,
-                  )}
-                </pre>
+                <div className="mt-3 grid gap-3 lg:grid-cols-[160px_minmax(0,1fr)]">
+                  <div className="rounded bg-[#0c1113] p-3 text-xs text-[#aebbc0]">
+                    <p className="text-[#8ee8d9]">phase</p>
+                    <p className="mt-1 font-semibold text-white">
+                      {event.phase}
+                    </p>
+                  </div>
+                  <pre className="overflow-x-auto rounded bg-[#0c1113] p-3 text-xs leading-6 text-[#c8d5da]">
+                    {JSON.stringify(event.payload, null, 2)}
+                  </pre>
+                </div>
               </details>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {isToolRegistry && config.toolRegistryItems ? (
+        <section className="border-b border-white/10 bg-[#101417] px-5 py-5 md:px-8">
+          <h2 className="text-sm font-semibold uppercase tracking-normal text-[#dce7eb]">
+            Tool Registry
+          </h2>
+          <div className="mt-4 grid gap-3 xl:grid-cols-3">
+            {config.toolRegistryItems.map((item) => {
+              const enabled = registryEnabledById[item.id] ?? item.enabled;
+              return (
+                <article
+                  key={item.id}
+                  data-testid={`tool-registry-item-${item.id}`}
+                  className="rounded-md border border-white/10 bg-[#151b1f] p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-white">
+                        {item.name}
+                      </p>
+                      <p className="mt-1 font-mono text-xs text-[#8ea4ac]">
+                        {item.id}
+                      </p>
+                    </div>
+                    <label className="inline-flex items-center gap-2 text-xs text-[#c8d5da]">
+                      启用
+                      <input
+                        type="checkbox"
+                        checked={enabled}
+                        onChange={() => toggleRegistryItem(item.id)}
+                        className="h-4 w-4 accent-[#2dd4bf]"
+                        aria-label={`${item.name} enabled`}
+                      />
+                    </label>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <StatusPill
+                      label={item.permission}
+                      className={RISK_STYLES.review}
+                    />
+                    <StatusPill
+                      label={enabled ? item.connection : "disabled"}
+                      className={
+                        enabled
+                          ? TASK_STATE_STYLES.verified
+                          : TASK_STATE_STYLES.blocked
+                      }
+                    />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {item.scopes.map((scope) => (
+                      <span
+                        key={scope}
+                        className="rounded border border-white/10 bg-white/[0.03] px-2 py-1 font-mono text-[11px] text-[#c8d5da]"
+                      >
+                        {scope}
+                      </span>
+                    ))}
+                  </div>
+                  <pre className="mt-3 overflow-x-auto rounded bg-[#0c1113] p-3 text-xs leading-5 text-[#c8d5da]">
+                    {item.schemaPreview}
+                  </pre>
+                  <p className="mt-3 rounded border border-[#2dd4bf]/30 bg-[#2dd4bf]/10 p-2 font-mono text-xs text-[#c8d5da]">
+                    mock: {item.mockResponse}
+                  </p>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {isCostBudget && config.budgetPolicies ? (
+        <section className="border-b border-white/10 bg-[#101417] px-5 py-5 md:px-8">
+          <h2 className="text-sm font-semibold uppercase tracking-normal text-[#dce7eb]">
+            预算策略
+          </h2>
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            {config.budgetPolicies.map((policy) => (
+              <article
+                key={policy.action}
+                data-testid={`budget-policy-${policy.action}`}
+                className="rounded-md border border-white/10 bg-[#151b1f] p-4"
+              >
+                <p className="font-mono text-xs text-[#8ee8d9]">
+                  {policy.threshold}
+                </p>
+                <h3 className="mt-2 text-sm font-semibold text-white">
+                  {policy.action}
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-[#aebbc0]">
+                  {policy.detail}
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {isPolicy && config.approvalPolicies ? (
+        <section className="border-b border-white/10 bg-[#101417] px-5 py-5 md:px-8">
+          <h2 className="text-sm font-semibold uppercase tracking-normal text-[#dce7eb]">
+            Approval Gate
+          </h2>
+          <div className="mt-4 grid gap-px overflow-hidden rounded-md border border-white/10 bg-white/10">
+            {config.approvalPolicies.map((policy) => (
+              <div
+                key={policy.reason}
+                data-testid={`approval-policy-${policy.reason}`}
+                className="grid gap-3 bg-[#151b1f] p-4 md:grid-cols-[160px_180px_minmax(0,1fr)] md:items-center"
+              >
+                <p className="text-sm font-semibold text-white">
+                  {policy.rule}
+                </p>
+                <StatusPill
+                  label={policy.reason}
+                  className={RISK_STYLES.danger}
+                />
+                <code className="min-w-0 overflow-x-auto rounded bg-[#0c1113] px-3 py-2 text-xs text-[#c8d5da]">
+                  {policy.sample}
+                </code>
+              </div>
             ))}
           </div>
         </section>

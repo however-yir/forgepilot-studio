@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from openhands.forgepilot.audit.schema import (
     AuditEvent,
     AuditEventType,
+    build_task_evidence_pack,
     export_audit_events_csv,
     export_audit_events_jsonl,
     ordered_timeline,
@@ -60,3 +61,28 @@ def test_export_audit_events_csv():
     assert lines[0].startswith('trace_id,task_id,event_type')
     assert 'trace-csv' in lines[1]
     assert 'verification' in lines[1]
+
+
+def test_task_evidence_pack_contains_full_jsonl_export():
+    events = [
+        AuditEvent(
+            trace_id='trace-task',
+            task_id='task-99',
+            event_type=AuditEventType.TASK_CREATED,
+            summary='create task',
+        ),
+        AuditEvent(
+            trace_id='trace-test',
+            task_id='task-99',
+            event_type=AuditEventType.TEST_RESULT,
+            summary='pytest passed',
+            payload={'command': 'pytest -q', 'exit_code': 0},
+        ),
+    ]
+
+    pack = build_task_evidence_pack(events)
+    exported = pack.model_dump_for_export()
+    assert pack.task_id == 'task-99'
+    assert pack.event_count == 2
+    assert 'task_created' in pack.event_types
+    assert '"event_type": "test_result"' in exported['audit_jsonl']
