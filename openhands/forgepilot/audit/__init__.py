@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from .replay import AuditReplaySummary, ReplayRiskQueue, build_audit_replay_summary
 from .schema import (
     AuditEvent,
     AuditEventType,
@@ -11,7 +12,6 @@ from .schema import (
     export_audit_events_jsonl,
     ordered_timeline,
 )
-from .replay import AuditReplaySummary, ReplayRiskQueue, build_audit_replay_summary
 from .timeline import (
     AuditTimeline,
     TimelineChain,
