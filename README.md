@@ -1,5 +1,7 @@
 <a name="readme-top"></a>
 
+# ForgePilot Studio
+
 <div align="center">
   <img src="docs/assets/forgepilot-logo.svg" alt="ForgePilot Studio Logo" width="360">
   <h1 align="center" style="border-bottom: none">ForgePilot Studio</h1>
