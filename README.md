@@ -12,7 +12,7 @@
 </p>
 
 > **[OpenHands](https://github.com/OpenHands/OpenHands) 深度分叉 (deep fork)，在 Agent 与 runtime 基础上自研：**
-> **控制平面** (Plan→Execute→Verify→Report) · **任务台** · **审计回放** · TeamSpace RBAC · Cost Thresholds · MCP Tool Registry · Private Deployment
+> **控制平面** (Plan→Execute→Verify→Report) · **任务台** · **Policy / Execution Harness** · **审计回放** · TeamSpace RBAC · Cost Thresholds · MCP Tool Registry · Private Deployment
 
 <div align="center">
   <img src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
@@ -65,6 +65,7 @@ ForgePilot Studio 把”创建任务 → 执行命令 → 修改代码 → 验�
 - [差异说明](docs/fork-differentiation.md)：说明哪些能力来自 OpenHands，哪些是 ForgePilot 新增或深改。
 - [上游同步策略](docs/upstream-sync.md)：说明同步策略、保留 `openhands/` 包名的原因、命名空间迁移和冲突处理。
 - [模块职责与测试清单](docs/forgepilot-module-map.md)：梳理 `openhands/forgepilot/*` 的职责和测试覆盖。
+- [Execution Harness](docs/forgepilot-execution-harness.md)：说明 runtime action 前后的 policy、confirm、observation 和 audit 包装层。
 - [本地模型与网关启动指引](docs/local-models-and-gateways.md)：覆盖 Ollama、LiteLLM、OpenAI-compatible gateway 和 Preview 演示路径。
 - [Preview Release 草稿](docs/forgepilot-preview-release.md)：固定“基于 OpenHands 深改”的发布口径和发布前检查项。
 - [Star Graph Integration](docs/star-graph-integration.md)：记录迁入 `third_party/star-graph` 的 ComfyUI Java client。
@@ -124,8 +125,9 @@ ForgePilot Studio 把”创建任务 → 执行命令 → 修改代码 → 验�
 4. 审计回放：统一 `AuditEvent`、timeline、JSONL/CSV 导出和交付报告证据链。
 5. 成本阈值：把 `max_budget_per_task` 与会话 metrics、任务预算视图连接起来。
 6. MCP 工具管理：工具 registry、权限、mock、schema、健康状态、调用记录和输出摘要。
-7. 私有化配置：集中管理 DB、Redis、Ollama、LLM 网关、镜像与工作区路径。
-8. 上游同步：保留 `openhands/` 包名作为迁移期兼容层，ForgePilot 专属能力放在 `openhands/forgepilot/*`。
+7. Policy / Execution Harness：围绕 terminal、file、git、MCP action 增加权限、确认、统一 observation 和 audit payload。
+8. 私有化配置：集中管理 DB、Redis、Ollama、LLM 网关、镜像与工作区路径。
+9. 上游同步：保留 `openhands/` 包名作为迁移期兼容层，ForgePilot 专属能力放在 `openhands/forgepilot/*`。
 
 上游来源参考：
 

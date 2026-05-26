@@ -9,6 +9,7 @@ __all__ = [
     'runtime_providers',
     'llm_gateway',
     'audit',
+    'harness',
     'tool_registry',
     'teamspace',
     'delivery',
