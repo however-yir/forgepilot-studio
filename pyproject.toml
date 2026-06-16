@@ -81,7 +81,7 @@ dependencies = [
   "python-dotenv",
   "python-frontmatter>=1.1",
   "python-json-logger>=3.2.1",
-  "python-multipart>=0.0.22",
+  "python-multipart>=0.0.31",
   "python-pptx",
   "python-socketio==5.14",
   "pythonnet; sys_platform=='win32'",
