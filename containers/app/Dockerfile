@@ -1,5 +1,5 @@
 ARG OPENHANDS_BUILD_VERSION=dev
-FROM node:26.1-trixie-slim AS frontend-builder
+FROM node:26.5-trixie-slim AS frontend-builder
 
 WORKDIR /app
 
