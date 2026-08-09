@@ -10,15 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  dependabot:
-    name: Dependabot
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Verify Dependabot configuration
-        run: test -f .github/dependabot.yml
-
   update-uv-graph:
     name: update-uv-graph
     runs-on: ubuntu-latest
