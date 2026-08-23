@@ -14,6 +14,8 @@
 > **[OpenHands](https://github.com/OpenHands/OpenHands) 深度分叉 (deep fork)，在 Agent 与 runtime 基础上自研：**
 > **控制平面** (Plan→Execute→Verify→Report) · **任务台** · **Policy / Execution Harness** · **审计回放** · TeamSpace RBAC · Cost Thresholds · MCP Tool Registry · Private Deployment
 
+> **⚠️ 治理组件状态说明（重要）**：自研治理层——控制平面协议、Execution Harness、ToolAccessGuard、ApprovalPolicy、BudgetPolicy、Cost Thresholds、TeamSpace RBAC 以及 `forgepilot_execution` 配置——目前为**实验性模块**，**尚未接入默认执行链路**：Agent 默认运行路径仍走上游 OpenHands 流程，以上组件以库代码 + 单元测试形态存在，仅有审计导出/工具注册表查询等少量端点在生产路由上暴露。生产部署请勿将其视为已生效的运行时防护。
+
 <div align="center">
   <img src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/FastAPI-Control%20Plane-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
@@ -119,13 +121,13 @@ ForgePilot Studio 把”创建任务 → 执行命令 → 修改代码 → 验�
 
 当前已完成或明确的差异化方向：
 
-1. 控制平面：`Plan -> Execute -> Verify -> Report` 任务协议、验收标准、变更边界和执行策略。
+1. 控制平面（实验性，未接入默认执行链路）：`Plan -> Execute -> Verify -> Report` 任务协议、验收标准、变更边界和执行策略。
 2. 任务台：默认首页聚焦任务队列、阶段状态、失败过滤、预算和私有化部署向导。
-3. 团队权限：`TeamSpace`、owner/admin/member/viewer 权限矩阵和空间隔离模型。
+3. 团队权限（实验性，未接入默认执行链路）：`TeamSpace`、owner/admin/member/viewer 权限矩阵和空间隔离模型。
 4. 审计回放：统一 `AuditEvent`、timeline、JSONL/CSV 导出和交付报告证据链。
-5. 成本阈值：把 `max_budget_per_task` 与会话 metrics、任务预算视图连接起来。
-6. MCP 工具管理：工具 registry、权限、mock、schema、健康状态、调用记录和输出摘要。
-7. Policy / Execution Harness：围绕 terminal、file、git、MCP action 增加权限、确认、统一 observation 和 audit payload。
+5. 成本阈值（实验性，未接入默认执行链路）：`max_budget_per_task` 预算策略与任务预算视图尚未与运行时会话 metrics 自动联动。
+6. MCP 工具管理（实验性，未接入默认执行链路）：工具 registry、权限、mock、schema、健康状态、调用记录和输出摘要。
+7. Policy / Execution Harness（实验性，未接入默认执行链路）：围绕 terminal、file、git、MCP action 的权限、确认、统一 observation 和 audit 包装层，默认 Agent 执行路径暂不经过该 Harness。
 8. 私有化配置：集中管理 DB、Redis、Ollama、LLM 网关、镜像与工作区路径。
 9. 上游同步：保留 `openhands/` 包名作为迁移期兼容层，ForgePilot 专属能力放在 `openhands/forgepilot/*`。
 

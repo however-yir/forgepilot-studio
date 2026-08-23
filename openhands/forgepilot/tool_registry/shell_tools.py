@@ -64,7 +64,6 @@ def execute_shell_tool(
     guard: ToolAccessGuard | None = None,
 ) -> tuple[ShellToolResult, object]:
     parameters = parameters or {}
-    entry = registry.get_entry(spec.tool_id)
     command = _build_command(spec, parameters)
     command_line = shlex.join(command)
 
@@ -98,7 +97,27 @@ def execute_shell_tool(
                 trace_id=trace_id,
             )
             return result, record
+        # guard.check passed, so the entry is guaranteed to exist.
+        entry = registry.get_entry(spec.tool_id)
     else:
+        try:
+            entry = registry.get_entry(spec.tool_id)
+        except KeyError:
+            result = ShellToolResult(
+                exit_code=126,
+                stdout='',
+                stderr=f'unknown tool: {spec.tool_id}',
+                command_line=command_line,
+            )
+            record = registry.record_call(
+                spec.tool_id,
+                parameters=parameters,
+                output=_summarize_result(result),
+                duration_ms=0,
+                error=f'unknown tool: {spec.tool_id}',
+                trace_id=trace_id,
+            )
+            return result, record
         # Inline checks (legacy path — no guard available).
         if not entry.enabled:
             result = ShellToolResult(
@@ -161,14 +180,36 @@ def execute_shell_tool(
         cwd = Path.cwd()
 
     started = time.perf_counter()
-    completed = subprocess.run(
-        command,
-        cwd=str(cwd),
-        text=True,
-        capture_output=True,
-        timeout=spec.timeout_seconds,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(cwd),
+            text=True,
+            capture_output=True,
+            timeout=spec.timeout_seconds,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        detail = f'timed out after {spec.timeout_seconds}s'
+        stderr = exc.stderr if isinstance(exc.stderr, str) else detail
+        if not stderr:
+            stderr = detail
+        result = ShellToolResult(
+            exit_code=124,  # conventional timeout exit status (GNU timeout)
+            stdout=exc.stdout if isinstance(exc.stdout, str) else '',
+            stderr=stderr,
+            command_line=command_line,
+        )
+        record = registry.record_call(
+            spec.tool_id,
+            parameters=parameters,
+            output=_summarize_result(result),
+            duration_ms=elapsed_ms,
+            error=detail,
+            trace_id=trace_id,
+        )
+        return result, record
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     result = ShellToolResult(
         exit_code=completed.returncode,

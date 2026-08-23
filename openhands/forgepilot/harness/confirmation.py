@@ -29,6 +29,7 @@ class ConfirmationGate:
         ttl_seconds: int | None = 300,
     ) -> ConfirmationToken:
         now = datetime.now(UTC)
+        self._prune(now)
         confirmation = ConfirmationToken(
             token=uuid4().hex,
             subject=subject,
@@ -54,3 +55,19 @@ class ConfirmationGate:
 
         confirmation.consumed_at = now
         return True
+
+    def _prune(self, now: datetime) -> None:
+        """Drop consumed and expired tokens.
+
+        Keeping them would grow the dict without bound: both a missing and a
+        consumed token make ``consume`` return False, so replay protection is
+        unaffected.
+        """
+        stale = [
+            token
+            for token, confirmation in self._tokens.items()
+            if confirmation.consumed
+            or (confirmation.expires_at is not None and now > confirmation.expires_at)
+        ]
+        for token in stale:
+            del self._tokens[token]

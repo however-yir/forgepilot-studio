@@ -1,5 +1,11 @@
 # ForgePilot Execution Harness
 
+> **Status: experimental — not wired into the default execution path.**
+> The harness classes are exercised by unit tests but no production code path
+> invokes them automatically: the default agent run loop still uses the
+> upstream OpenHands executors directly. Adopting the harness requires an
+> explicit integration step (wrapping the runtime executor as shown below).
+
 ForgePilot Execution Harness is the policy and audit layer around existing
 OpenHands runtime actions. It does not replace terminal, file, git, or MCP
 execution. Instead, it classifies each action before execution, checks policy

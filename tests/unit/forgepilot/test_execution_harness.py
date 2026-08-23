@@ -207,3 +207,29 @@ def test_confirmation_required_event_feeds_audit_replay_risk_queue():
 
     assert result.audit_event.event_type == AuditEventType.APPROVAL_REQUESTED
     assert replay.risk_queues[0].name == 'approval_required'
+
+
+def test_confirmation_gate_prunes_consumed_and_expired_tokens():
+    """Consumed/expired tokens must not accumulate forever (L-2).
+
+    A missing token behaves exactly like a consumed one (consume → False), so
+    dropping stale entries preserves replay protection while bounding memory.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    gate = ConfirmationGate()
+    consumed = gate.issue('subject-a', ttl_seconds=300)
+    gate.consume(consumed.token, subject='subject-a')
+    assert gate.consume(consumed.token, subject='subject-a') is False  # one-shot
+
+    expired = gate.issue('subject-b', ttl_seconds=0)
+    gate._tokens[expired.token].expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    live = gate.issue('subject-c', ttl_seconds=300)
+
+    # Issuing again prunes consumed + expired entries.
+    gate.issue('subject-d', ttl_seconds=300)
+
+    assert consumed.token not in gate._tokens
+    assert expired.token not in gate._tokens
+    assert live.token in gate._tokens
+    assert len(gate._tokens) == 2

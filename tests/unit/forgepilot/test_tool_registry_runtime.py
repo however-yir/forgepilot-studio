@@ -85,6 +85,7 @@ def test_invoke_uses_mock_response_when_present():
     record = registry.invoke(
         'connector.github',
         parameters={'repo': 'however-yir/forgepilot-studio'},
+        confirmed=True,
     )
     assert record.output_summary == 'mock-check-result'
     assert record.duration_ms == 55
@@ -103,7 +104,9 @@ def test_registry_previews_schema_and_permission_scopes():
 
 def test_invoke_requires_executor_when_live_mode():
     registry = ToolRegistry.from_builtin_templates()
-    record = registry.invoke('connector.github', parameters={'repo': 'x'})
+    record = registry.invoke(
+        'connector.github', parameters={'repo': 'x'}, confirmed=True
+    )
     assert record.error == 'live executor is required when mock mode is disabled'
 
 
@@ -118,6 +121,7 @@ def test_invoke_live_executor_success():
         'connector.github',
         parameters={'repo': 'however-yir/forgepilot-studio'},
         executor=executor,
+        confirmed=True,
     )
     assert record.error is None
     assert 'ok:connector.github:however-yir/forgepilot-studio' in record.output_summary
@@ -148,3 +152,33 @@ def test_build_http_connector_request_from_variables():
     )
     assert request['headers']['Authorization'] == 'Bearer secure-token'
     assert request['query_params']['format'] == 'jsonl'
+
+
+def test_mermaid_registry_graph_escapes_labels():
+    """Display names must not be able to break out of Mermaid labels (L-7)."""
+    from openhands.forgepilot.tool_registry.enforcement import (
+        generate_mermaid_registry_graph,
+    )
+    from openhands.forgepilot.tool_registry.schema import ToolRegistryEntry
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolRegistryEntry(
+            tool_id='connector.evil',
+            display_name='Evil"] inject\ngraph TD; X["pwned',
+            provider='weird"provider',
+        )
+    )
+
+    graph = generate_mermaid_registry_graph(registry)
+
+    assert '&quot;' in graph
+    # The renderer wraps the label in `["..."]`; strip those structural
+    # delimiters and verify no raw double-quote or newline remains inside.
+    for line in graph.splitlines():
+        if 'connector_evil[' in line:
+            label = line.split('[', 1)[1]
+            assert label.startswith('"') and label.endswith('"]')
+            label = label[1:-2]
+            assert '"' not in label.replace('&quot;', '')
+            assert '\n' not in label

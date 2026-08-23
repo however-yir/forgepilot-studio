@@ -5,7 +5,7 @@ from typing import Iterable
 from pydantic import BaseModel, Field
 
 from .schema import AuditEvent, AuditEventType, build_task_evidence_pack
-from .timeline import AuditTimeline, build_timeline
+from .timeline import AuditTimeline, assign_unique_node_ids, build_timeline
 
 
 class ReplayRiskQueue(BaseModel):
@@ -56,23 +56,53 @@ class AuditReplaySummary(BaseModel):
         return '\n'.join(lines)
 
 
+_FAILED_STATUSES = {'failed', 'fail', 'error'}
+
+
+def _is_failed_verification(event: AuditEvent) -> bool:
+    """Match both producer contracts for verification failures.
+
+    Harness audit events report a ``status`` field, while events derived from
+    the live event stream (``CmdOutputObservation``) report an integer
+    ``exit_code``; either signal marks the verification as failed.
+    """
+    if str(event.payload.get('status', '')).lower() in _FAILED_STATUSES:
+        return True
+    exit_code = event.payload.get('exit_code')
+    return exit_code is not None and str(exit_code) != '0'
+
+
+def _is_high_risk_command_event(event: AuditEvent) -> bool:
+    """Read the risk field written by the event-stream producers.
+
+    Live ``CmdRunAction`` events carry ``security_risk``; ``risk`` is kept as
+    a fallback for audit events produced by older payloads.
+    """
+    risk = event.payload.get('security_risk', event.payload.get('risk', ''))
+    return str(risk).lower() == 'high'
+
+
 def _risk_queues(events: list[AuditEvent]) -> list[ReplayRiskQueue]:
+    # Event ids must be unique: several events can share a trace_id (all
+    # actions of one LLM response), so use the same unique node ids as the
+    # timeline builder to keep queue references unambiguous and stable.
+    identified = assign_unique_node_ids(events)
     approval_requests = [
-        event.trace_id
-        for event in events
+        node_id
+        for node_id, event in identified
         if event.event_type == AuditEventType.APPROVAL_REQUESTED
     ]
     failed_verifications = [
-        event.trace_id
-        for event in events
+        node_id
+        for node_id, event in identified
         if event.event_type in {AuditEventType.TEST_RESULT, AuditEventType.VERIFICATION}
-        and str(event.payload.get('status', '')).lower() in {'failed', 'fail', 'error'}
+        and _is_failed_verification(event)
     ]
     high_risk_commands = [
-        event.trace_id
-        for event in events
+        node_id
+        for node_id, event in identified
         if event.event_type in {AuditEventType.COMMAND, AuditEventType.COMMAND_RUN}
-        and str(event.payload.get('risk', '')).lower() == 'high'
+        and _is_high_risk_command_event(event)
     ]
 
     queues: list[ReplayRiskQueue] = []

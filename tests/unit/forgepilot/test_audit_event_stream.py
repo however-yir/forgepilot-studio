@@ -58,3 +58,33 @@ def test_audit_events_from_event_stream_exports_required_event_types():
     assert AuditEventType.TEST_RESULT in event_types
     assert AuditEventType.APPROVAL_REQUESTED in event_types
     assert events[-1].payload['exit_code'] == 0
+
+
+def test_subsequent_user_messages_are_recorded_as_user_message_events():
+    """Multi-turn conversations must keep every user input in the audit trail.
+
+    Previously only the first user message was recorded (as TASK_CREATED);
+    follow-up user messages vanished from the audit export entirely.
+    """
+    first = MessageAction('Fix login bug', 'user', 1)
+    followup_1 = MessageAction('Also fix the signup flow', 'user', 5)
+    followup_2 = MessageAction('Bump the timeout to 30s', 'user', 9)
+
+    events = audit_events_from_event_stream(
+        [first, followup_1, followup_2],
+        task_id='task-login',
+    )
+
+    task_created = [e for e in events if e.event_type == AuditEventType.TASK_CREATED]
+    user_messages = [e for e in events if e.event_type == AuditEventType.USER_MESSAGE]
+
+    assert len(task_created) == 1
+    assert task_created[0].summary == 'Fix login bug'
+
+    assert len(user_messages) == 3
+    assert [m.summary for m in user_messages] == [
+        'Fix login bug',
+        'Also fix the signup flow',
+        'Bump the timeout to 30s',
+    ]
+    assert all(m.payload['source'] == 'user' for m in user_messages)

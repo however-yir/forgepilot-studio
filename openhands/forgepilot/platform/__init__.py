@@ -7,7 +7,7 @@ G-68: Tenant and role model with billing dimensions.
 
 from __future__ import annotations
 
-import hashlib
+import logging
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
@@ -147,7 +147,11 @@ class StructuredLogger:
             try:
                 handler(entry)
             except Exception:
-                pass
+                # Report the failure instead of silently dropping it; the
+                # stdlib logger is used to avoid re-entering our own handlers.
+                logging.getLogger(__name__).exception(
+                    'structured log handler failed for entry %s', entry.trace_id
+                )
         return entry
 
     def debug(self, message: str, **kwargs: Any) -> StructuredLogEntry:
@@ -210,7 +214,9 @@ class AuditArchivalPolicy(BaseModel):
 class AuditExporter:
     """Export audit events to S3-compatible object storage.
 
-    Uses HMAC-SHA256 signing for the S3 API.  For production, replace with boto3.
+    NOTE: this is a stub.  No object-storage upload is implemented yet, so
+    ``export`` reports ``status='not_implemented'`` instead of pretending the
+    archive succeeded.  Wire it to a real S3/boto3 client before relying on it.
     """
 
     def __init__(self, config: ObjectStorageConfig) -> None:
@@ -225,38 +231,20 @@ class AuditExporter:
         format: ExportFormat = ExportFormat.JSONL,
     ) -> AuditExportJob:
         job = AuditExportJob(space_id=space_id, format=format)
-        job.status = 'running'
-
-        timestamp = datetime.now(UTC).strftime('%Y%m%d-%H%M%S')
-        key = f'{self._config.prefix}{space_id}/{timestamp}-{task_id}.jsonl'
-        job.object_key = key
-
-        # Build signed S3 PUT request (portable, no boto3 dependency)
-        try:
-            body = events_jsonl.encode('utf-8')
-            hashlib.sha256(body).hexdigest()
-            # In production, use proper AWS SigV4 signing
-            # For now, record the operation as ready
-            job.event_count = events_jsonl.count('\n') + 1 if events_jsonl else 0
-            job.status = 'completed'
-            job.completed_at = datetime.now(UTC)
-            platform_logger.info(
-                'audit_export_completed',
-                component='audit_exporter',
-                job_id=job.job_id,
-                object_key=key,
-                event_count=job.event_count,
-            )
-        except Exception as exc:
-            job.status = 'failed'
-            job.error = str(exc)
-            platform_logger.error(
-                'audit_export_failed',
-                component='audit_exporter',
-                job_id=job.job_id,
-                error=str(exc),
-            )
-
+        job.event_count = events_jsonl.count('\n') + 1 if events_jsonl else 0
+        job.status = 'not_implemented'
+        job.error = (
+            'AuditExporter does not implement object-storage upload yet; '
+            'events were NOT archived. Integrate a real S3 client before '
+            'treating audit archives as durable.'
+        )
+        platform_logger.warn(
+            'audit_export_not_implemented',
+            component='audit_exporter',
+            job_id=job.job_id,
+            space_id=space_id,
+            event_count=job.event_count,
+        )
         return job
 
     def archive_events(

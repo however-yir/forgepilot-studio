@@ -34,13 +34,28 @@ def audit_events_from_event_stream(
         source = _enum_value(getattr(event, 'source', None))
 
         if event_kind == 'MessageAction':
-            if source == 'user' and not first_user_message_seen:
-                first_user_message_seen = True
+            if source == 'user':
+                if not first_user_message_seen:
+                    first_user_message_seen = True
+                    audit_events.append(
+                        AuditEvent(
+                            trace_id=trace_id,
+                            task_id=task_id,
+                            event_type=AuditEventType.TASK_CREATED,
+                            phase='plan',
+                            timestamp=timestamp,
+                            summary=_truncate(event.content),
+                            payload={'source': 'user'},
+                        )
+                    )
+                # Every user message (not only the first one) is recorded so
+                # multi-turn conversations keep their user input in the audit
+                # trail.
                 audit_events.append(
                     AuditEvent(
                         trace_id=trace_id,
                         task_id=task_id,
-                        event_type=AuditEventType.TASK_CREATED,
+                        event_type=AuditEventType.USER_MESSAGE,
                         phase='plan',
                         timestamp=timestamp,
                         summary=_truncate(event.content),

@@ -163,6 +163,10 @@ class SpaceRegistry:
         space = self._get_space_or_raise(space_id)
         guard = SpacePermissionGuard(space)
         guard.require(actor_id, 'space:manage')
+        if role == SpaceRole.OWNER:
+            raise PermissionError(
+                'OWNER role is fixed at space creation and cannot be granted'
+            )
         space.members[user_id] = SpaceMember(user_id=user_id, role=role)
 
     def remove_member(self, space_id: str, user_id: str, *, actor_id: str) -> None:
@@ -181,6 +185,12 @@ class SpaceRegistry:
         guard.require(actor_id, 'space:manage')
         if user_id not in space.members:
             raise ValueError(f'User {user_id} is not a member')
+        if user_id == space.owner_id:
+            raise PermissionError('Cannot change the space owner role')
+        if new_role == SpaceRole.OWNER:
+            raise PermissionError(
+                'OWNER role is fixed at space creation and cannot be granted'
+            )
         space.members[user_id].role = new_role
 
     def guard(self, space_id: str) -> SpacePermissionGuard:

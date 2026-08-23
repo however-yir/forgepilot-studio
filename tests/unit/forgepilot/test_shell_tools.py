@@ -90,3 +90,103 @@ def test_execute_shell_tool_rejects_disabled_tool():
     assert result.exit_code == 126
     assert result.stderr == 'tool is disabled'
     assert record.error == 'tool is disabled'
+
+
+# ── M-3: timeout and unknown-tool handling ───────────
+
+
+def test_execute_shell_tool_records_timeout_with_exit_code_124():
+    registry = ToolRegistry.from_builtin_templates()
+    registry.register(
+        ToolRegistryEntry(
+            tool_id='shell.sleep',
+            display_name='Sleep',
+            provider='shell',
+            permission=ToolPermission.EXECUTE,
+            mode=ToolExecutionMode.LIVE,
+        )
+    )
+    spec = ShellToolSpec(
+        tool_id='shell.sleep',
+        display_name='Sleep',
+        command='sh',
+        args=['-c', 'sleep 5'],
+        timeout_seconds=1,
+    )
+    result, record = execute_shell_tool(
+        registry,
+        spec,
+        trace_id='trace-timeout',
+    )
+    assert result.exit_code == 124
+    assert 'timed out after 1s' in result.stderr
+    assert 'timed out after 1s' in record.error
+    assert record.trace_id == 'trace-timeout'
+    assert 'exit_code: 124' in record.output_summary
+
+
+def test_execute_shell_tool_unknown_tool_returns_126_not_keyerror():
+    """Legacy path (no guard): unknown tools must be reported, not crash."""
+    registry = ToolRegistry.from_builtin_templates()
+    spec = ShellToolSpec(
+        tool_id='shell.nope',
+        display_name='Missing',
+        command='echo',
+        args=['hi'],
+    )
+    result, record = execute_shell_tool(registry, spec)
+    assert result.exit_code == 126
+    assert 'unknown tool' in result.stderr
+    assert 'unknown tool' in (record.error or '')
+
+
+def test_execute_shell_tool_unknown_tool_with_guard_audited():
+    """Guard path: unknown tools are denied by the guard and still audited."""
+    from openhands.forgepilot.tool_registry.enforcement import ToolAccessGuard
+
+    registry = ToolRegistry.from_builtin_templates()
+    guard = ToolAccessGuard(registry)
+    spec = ShellToolSpec(
+        tool_id='shell.nope',
+        display_name='Missing',
+        command='echo',
+        args=['hi'],
+    )
+    result, record = execute_shell_tool(registry, spec, guard=guard)
+    assert result.exit_code == 126
+    assert 'unknown tool' in result.stderr
+    assert 'unknown tool' in (record.error or '')
+    assert 'unknown tool' in guard.violations[-1].detail
+
+
+def test_execute_shell_tool_guard_confirmed_confirm_tool_runs():
+    """Guard path: a CONFIRM shell tool with confirmed=True must execute."""
+    from openhands.forgepilot.tool_registry.enforcement import ToolAccessGuard
+
+    registry = ToolRegistry.from_builtin_templates()
+    registry.register(
+        ToolRegistryEntry(
+            tool_id='shell.confirm.echo',
+            display_name='Confirmed Echo',
+            provider='shell',
+            permission=ToolPermission.CONFIRM,
+            mode=ToolExecutionMode.LIVE,
+        )
+    )
+    guard = ToolAccessGuard(registry)
+    spec = ShellToolSpec(
+        tool_id='shell.confirm.echo',
+        display_name='Confirmed Echo',
+        command='printf',
+        args=['{{value}}'],
+    )
+    result, record = execute_shell_tool(
+        registry,
+        spec,
+        parameters={'value': 'approved'},
+        confirmed=True,
+        guard=guard,
+    )
+    assert result.exit_code == 0
+    assert result.stdout == 'approved'
+    assert record.error is None

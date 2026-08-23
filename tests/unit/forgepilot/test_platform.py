@@ -66,6 +66,18 @@ def test_tenant_plan_limits():
     assert plan.team_spaces_enabled is False
 
 
+def test_structured_logger_survives_failing_handler():
+    """A broken handler must not break logging, nor fail silently (L-3)."""
+    logger = StructuredLogger()
+
+    def bad_handler(entry):
+        raise RuntimeError('handler exploded')
+
+    logger._handlers.append(bad_handler)
+    entry = logger.info('still works')
+    assert entry.message == 'still works'
+
+
 def test_audit_exporter_creates_job():
     config = ObjectStorageConfig(
         endpoint='https://s3.example.com',
@@ -79,6 +91,9 @@ def test_audit_exporter_creates_job():
         space_id='space-1',
         task_id='task-1',
     )
-    assert job.status == 'completed'
+    # No object-storage upload is implemented: the exporter must not pretend
+    # the archive succeeded (M-4).
+    assert job.status == 'not_implemented'
     assert job.event_count == 2
-    assert 'space-1' in job.object_key
+    assert job.object_key == ''
+    assert 'NOT archived' in job.error

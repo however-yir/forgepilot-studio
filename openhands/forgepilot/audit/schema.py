@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 class AuditEventType(str, Enum):
     TASK_CREATED = 'task_created'
+    USER_MESSAGE = 'user_message'
     MODEL_RESPONSE = 'model_response'
     COMMAND_RUN = 'command_run'
     TEST_RESULT = 'test_result'
@@ -83,8 +84,22 @@ def export_audit_events_jsonl(events: Iterable[AuditEvent]) -> str:
     lines: list[str] = []
     for event in ordered_timeline(events):
         row = event.model_dump_for_export()
-        lines.append(json.dumps(row, ensure_ascii=False))
+        # default=str keeps export working when payloads carry values that
+        # json cannot serialize natively (enums, datetimes, exceptions).
+        lines.append(json.dumps(row, ensure_ascii=False, default=str))
     return '\n'.join(lines)
+
+
+# Characters that spreadsheet applications interpret as formula starters.
+# Prefixing them prevents CSV formula injection when exports are opened in
+# Excel / Google Sheets / LibreOffice.
+_CSV_FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r')
+
+
+def _sanitize_csv_cell(value: Any) -> Any:
+    if isinstance(value, str) and value.startswith(_CSV_FORMULA_PREFIXES):
+        return f"'{value}"
+    return value
 
 
 def export_audit_events_csv(events: Iterable[AuditEvent]) -> str:
@@ -107,7 +122,8 @@ def export_audit_events_csv(events: Iterable[AuditEvent]) -> str:
 
     for event in ordered_timeline(events):
         row = event.model_dump_for_export()
-        row['payload'] = json.dumps(row['payload'], ensure_ascii=False)
+        row['payload'] = json.dumps(row['payload'], ensure_ascii=False, default=str)
+        row = {key: _sanitize_csv_cell(value) for key, value in row.items()}
         writer.writerow(row)
 
     return output.getvalue()

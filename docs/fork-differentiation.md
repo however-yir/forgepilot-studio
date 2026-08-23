@@ -22,6 +22,8 @@ ForgePilot 不重复造 OpenHands 已经成熟的底座，而是在可治理、�
 
 ## ForgePilot 新增或深改能力
 
+> **⚠️ 接线状态（诚实标注）**：下述治理类能力——控制平面（任务协议/审批/预算策略）、团队权限（TeamSpace RBAC）、成本阈值（Cost Thresholds / BudgetPolicy）、MCP 工具治理（ToolAccessGuard / ApprovalPolicy）与 [Execution Harness](forgepilot-execution-harness.md)——目前均为**实验性模块，尚未接入默认执行链路**：默认 Agent 运行仍走上游 OpenHands 的 controller/executor，这些模块以库代码 + 单元测试形态存在，`forgepilot_execution` 配置段也暂无运行时读取方。本节描述的是目标形态与已实现的数据结构。
+
 ### 控制平面
 
 对应模块：`openhands/forgepilot/control_plane/`

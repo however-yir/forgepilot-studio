@@ -220,12 +220,15 @@ class ToolAccessGuard:
         trace_id: str | None = None,
         target_path: str | None = None,
         required: ToolPermission = ToolPermission.READ,
+        confirmed: bool = False,
     ):
         """Invoke a tool through the permission guard.
 
         Behaves identically to ToolRegistry.invoke but first runs permission,
-        enablement, and path-boundary checks.  Raises PermissionError on violation
-        when block_on_violation is True.
+        enablement, and path-boundary checks.  Tools whose permission level is
+        CONFIRM are additionally gated on the ``confirmed`` flag and are
+        rejected unless a human confirmation has been supplied.  Raises
+        PermissionError on violation when block_on_violation is True.
         """
         if not self.check(
             tool_id,
@@ -247,11 +250,35 @@ class ToolAccessGuard:
                 trace_id=trace_id,
             )
 
+        entry = self._registry.get_entry(tool_id)
+        if entry.permission == ToolPermission.CONFIRM and not confirmed:
+            self._violations.append(
+                PermissionViolation(
+                    tool_id=tool_id,
+                    required_permission=required,
+                    actual_permission=entry.permission,
+                    detail='confirmation required for CONFIRM tools',
+                )
+            )
+            if self._block_on_violation:
+                raise PermissionError(
+                    f'Tool access denied: {tool_id} — confirmation required'
+                )
+            return self._registry.record_call(
+                tool_id=tool_id,
+                parameters=parameters,
+                output='',
+                duration_ms=0,
+                error='confirmation required for CONFIRM tools',
+                trace_id=trace_id,
+            )
+
         return self._registry.invoke(
             tool_id,
             parameters,
             executor=executor,
             trace_id=trace_id,
+            confirmed=confirmed,
         )
 
 
@@ -269,21 +296,29 @@ class SchemaNode:
     description: str = ''
 
 
+def _escape_mermaid_label(text: str) -> str:
+    """Escape user-controlled text so it cannot break out of a Mermaid label."""
+    return text.replace('"', '&quot;').replace('\n', ' ')
+
+
 def _entries_to_graph(entries: list[ToolRegistryEntry]) -> str:
     """Render tool schemas as a Mermaid graph for the MCP Registry dashboard."""
     lines = ['graph TD', '  TITLE[MCP Tool Registry]']
     for entry in entries:
         node_id = _safe_id(entry.tool_id)
-        provider = entry.provider or 'unknown'
+        provider = _escape_mermaid_label(entry.provider or 'unknown')
         permission = entry.permission.value
         status = 'enabled' if entry.enabled else 'disabled'
+        display_name = _escape_mermaid_label(entry.display_name)
+        tool_id = _escape_mermaid_label(entry.tool_id)
         lines.append(
-            f'  {node_id}["{entry.display_name} ({entry.tool_id})<br/>'
+            f'  {node_id}["{display_name} ({tool_id})<br/>'
             f'{provider} | {permission} | {status}"]'
         )
         if entry.schema_ref:
             schema_id = f'{node_id}_schema'
-            lines.append(f'  {schema_id}[("Schema: {entry.schema_ref.schema_type}")]')
+            schema_type = _escape_mermaid_label(entry.schema_ref.schema_type)
+            lines.append(f'  {schema_id}[("Schema: {schema_type}")]')
             lines.append(f'  {node_id} --> {schema_id}')
     return '\n'.join(lines)
 
@@ -339,11 +374,17 @@ def _safe_id(tool_id: str) -> str:
 
 
 def _meets_permission(actual: ToolPermission, required: ToolPermission) -> bool:
-    """Check if actual permission level satisfies the required level."""
+    """Check if actual permission level satisfies the required level.
+
+    CONFIRM means "EXECUTE-level capability that additionally requires human
+    confirmation": it satisfies every requirement EXECUTE satisfies, and the
+    confirmation gate itself is enforced separately (see ``guard_invoke`` and
+    ``ToolRegistry.invoke``).
+    """
     levels = {
         ToolPermission.READ: 0,
         ToolPermission.WRITE: 1,
         ToolPermission.EXECUTE: 2,
-        ToolPermission.CONFIRM: 0,  # CONFIRM requires human approval, not auto
+        ToolPermission.CONFIRM: 2,  # EXECUTE + human confirmation gate
     }
     return levels.get(actual, 0) >= levels.get(required, 0)

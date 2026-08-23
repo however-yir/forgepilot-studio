@@ -238,8 +238,20 @@ class ToolRegistry:
         *,
         executor: Callable[[str, Mapping[str, object] | str], str] | None = None,
         trace_id: str | None = None,
+        confirmed: bool = False,
     ) -> ToolCallRecord:
         entry = self.get_entry(tool_id)
+        # CONFIRM tools require an explicit human confirmation on every
+        # invocation path, with or without a ToolAccessGuard.
+        if entry.permission == ToolPermission.CONFIRM and not confirmed:
+            return self.record_call(
+                tool_id=tool_id,
+                parameters=parameters,
+                output='',
+                duration_ms=0,
+                error='confirmation required for CONFIRM tools',
+                trace_id=trace_id,
+            )
         mock_spec = self._mock_specs.get(tool_id)
         use_mock = entry.mode == ToolExecutionMode.MOCK or mock_spec is not None
 
@@ -296,7 +308,9 @@ class ToolRegistry:
         error: str | None = None,
         trace_id: str | None = None,
     ) -> ToolCallRecord:
-        entry = self.get_entry(tool_id)
+        # Tolerate unknown tools so denied calls (e.g. a guard rejection of an
+        # unregistered tool id) still leave an audit record.
+        entry = self._entries.get(tool_id)
         parameters_text = (
             json.dumps(parameters, ensure_ascii=False)
             if isinstance(parameters, Mapping)
@@ -309,7 +323,7 @@ class ToolRegistry:
             parameters_summary=summarize_tool_output(parameters_text, max_chars=300),
             output_summary=summarize_tool_output(output, max_chars=800),
             error=error,
-            mode=entry.mode,
+            mode=entry.mode if entry is not None else ToolExecutionMode.LIVE,
         )
         self._call_records.append(record)
         return record

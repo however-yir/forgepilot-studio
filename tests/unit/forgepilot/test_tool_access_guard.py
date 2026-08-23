@@ -440,3 +440,76 @@ class TestHTTPEndPoint:
             target_path='src/app.py',
         )
         assert record.error is None
+
+
+# ── CONFIRM permission semantics (M-2) ────────────────
+
+
+class TestConfirmPermission:
+    """CONFIRM = EXECUTE-level capability + a human confirmation gate."""
+
+    @staticmethod
+    def _registry_with_confirm_tool() -> ToolRegistry:
+        registry = ToolRegistry()
+        registry.register(
+            ToolRegistryEntry(
+                tool_id='connector.github',
+                display_name='GitHub',
+                provider='github',
+                permission=ToolPermission.CONFIRM,
+                mode=ToolExecutionMode.MOCK,
+            )
+        )
+        return registry
+
+    def test_check_confirms_satisfies_execute_requirement(self):
+        """Guard path: CONFIRM tools must satisfy EXECUTE-level checks.
+
+        Previously CONFIRM compared as level 0, so guard-based callers could
+        never execute CONFIRM tools even after approval.
+        """
+        registry = self._registry_with_confirm_tool()
+        guard = ToolAccessGuard(registry)
+        assert guard.check('connector.github', required=ToolPermission.EXECUTE) is True
+        assert guard.violations == []
+
+    def test_check_confirm_satisfies_read_and_write_requirements(self):
+        registry = self._registry_with_confirm_tool()
+        guard = ToolAccessGuard(registry)
+        assert guard.check('connector.github', required=ToolPermission.READ) is True
+        assert guard.check('connector.github', required=ToolPermission.WRITE) is True
+
+    def test_guard_invoke_confirm_tool_blocked_without_confirmation(self):
+        """guard_invoke path: unconfirmed CONFIRM tools must be denied."""
+        registry = self._registry_with_confirm_tool()
+        guard = ToolAccessGuard(registry)
+        with pytest.raises(PermissionError, match='confirmation required'):
+            guard.guard_invoke('connector.github', {})
+        assert 'confirmation required' in guard.violations[-1].detail
+
+    def test_guard_invoke_confirm_tool_non_blocking_records_error(self):
+        registry = self._registry_with_confirm_tool()
+        guard = ToolAccessGuard(registry)
+        guard._block_on_violation = False
+        record = guard.guard_invoke('connector.github', {})
+        assert 'confirmation required' in record.error
+
+    def test_guard_invoke_confirm_tool_executes_when_confirmed(self):
+        registry = self._registry_with_confirm_tool()
+        guard = ToolAccessGuard(registry)
+        record = guard.guard_invoke('connector.github', {}, confirmed=True)
+        assert record.error is None
+
+    def test_registry_invoke_confirm_tool_gated_without_guard(self):
+        """Unguarded ToolRegistry.invoke must also enforce the confirmation."""
+        registry = self._registry_with_confirm_tool()
+        record = registry.invoke('connector.github', {})
+        assert record.error == 'confirmation required for CONFIRM tools'
+
+        confirmed_record = registry.invoke('connector.github', {}, confirmed=True)
+        assert confirmed_record.error is None
+
+    def test_read_tool_invoke_unaffected_by_confirmation_gate(self):
+        registry = _make_registry()
+        record = registry.invoke('file.read', {})
+        assert record.error is None
