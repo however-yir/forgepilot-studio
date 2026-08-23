@@ -10,14 +10,14 @@
     "@heroui/react": "2.8.10",
     "@microlink/react-json-view": "^1.31.20",
     "@monaco-editor/react": "^4.7.0-rc.0",
-    "@react-router/node": "^7.15.0",
-    "@react-router/serve": "^7.15.0",
+    "@react-router/node": "^7.18.2",
+    "@react-router/serve": "^7.18.2",
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/react-query": "^5.100.9",
     "@uidotdev/usehooks": "^2.4.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "axios": "1.16.0",
+    "axios": "1.18.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "downshift": "^9.3.2",
@@ -29,14 +29,14 @@
     "isbot": "^5.1.40",
     "lucide-react": "^1.14.0",
     "monaco-editor": "^0.55.1",
-    "posthog-js": "^1.372.10",
+    "posthog-js": "^1.418.10",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-hot-toast": "^2.6.0",
     "react-i18next": "^16.6.6",
     "react-icons": "^5.6.0",
     "react-markdown": "^10.1.0",
-    "react-router": "^7.15.0",
+    "react-router": "^7.18.2",
     "react-syntax-highlighter": "^16.1.0",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
@@ -44,7 +44,7 @@
     "socket.io-client": "^4.8.3",
     "tailwind-merge": "^3.5.0",
     "tailwind-scrollbar": "^4.0.2",
-    "vite": "^7.3.3",
+    "vite": "^7.3.5",
     "zustand": "^5.0.10"
   },
   "scripts": {
@@ -82,7 +82,7 @@
   "devDependencies": {
     "@mswjs/socket.io-binding": "^0.2.0",
     "@playwright/test": "^1.59.1",
-    "@react-router/dev": "^7.15.0",
+    "@react-router/dev": "^7.18.2",
     "@tailwindcss/typography": "^0.5.19",
     "@tanstack/eslint-plugin-query": "^5.100.9",
     "@testing-library/dom": "^10.4.1",
@@ -129,7 +129,47 @@
     ]
   },
   "overrides": {
-    "dompurify": "3.3.2",
-    "msw": "2.10.5"
+    "dompurify": "3.4.13",
+    "msw": "2.10.5",
+    "@babel/core": "7.29.6",
+    "body-parser": "1.20.6",
+    "esbuild": "0.28.1",
+    "form-data": "4.0.6",
+    "js-yaml": "4.3.1",
+    "morgan": "1.11.0",
+    "nanoid": "3.3.18",
+    "postcss": "8.5.23",
+    "protobufjs": "7.6.5",
+    "qs": "6.15.2",
+    "socket.io-parser": "4.2.7",
+    "valibot": "1.4.2",
+    "ws": "8.21.0",
+    "@eslint/eslintrc": {
+      "brace-expansion": "1.1.18"
+    },
+    "@humanwhocodes/config-array": {
+      "brace-expansion": "1.1.18"
+    },
+    "eslint": {
+      "brace-expansion": "1.1.18"
+    },
+    "eslint-plugin-import": {
+      "brace-expansion": "1.1.18"
+    },
+    "eslint-plugin-jsx-a11y": {
+      "brace-expansion": "1.1.18"
+    },
+    "eslint-plugin-react": {
+      "brace-expansion": "1.1.18"
+    },
+    "glob": {
+      "brace-expansion": "1.1.18"
+    },
+    "@typescript-eslint/utils": {
+      "brace-expansion": "5.0.9"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "brace-expansion": "2.1.4"
+    }
   }
 }
