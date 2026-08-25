@@ -102,12 +102,33 @@ def is_valid_phase_transition(
     return next_index == current_index + 1
 
 
-def validate_phase_sequence(phases: Iterable[TaskPhase]) -> bool:
-    """Validate a full execution trace under the fixed task protocol."""
+def validate_phase_sequence(
+    phases: Iterable[TaskPhase],
+    *,
+    require_complete: bool = True,
+) -> bool:
+    """Validate a phase sequence under the fixed task protocol.
+
+    When ``require_complete`` is True (the default) the sequence must end at
+    ``REPORT`` — this is what callers want when validating a finished task
+    trace. When False, a prefix is accepted as long as every transition is
+    legal, so a real-time trace from an in-progress task (e.g. ``[PLAN,
+    EXECUTE]`` or ``[PLAN, EXECUTE, VERIFY]``) can be validated without
+    waiting for the task to reach ``REPORT``.
+    """
 
     previous: TaskPhase | None = None
+    last: TaskPhase | None = None
     for phase in phases:
         if not is_valid_phase_transition(previous, phase):
             return False
         previous = phase
-    return previous == TaskPhase.REPORT
+        last = phase
+
+    if last is None:
+        # An empty sequence is not a valid protocol trace at all.
+        return False
+
+    if require_complete:
+        return last == TaskPhase.REPORT
+    return True

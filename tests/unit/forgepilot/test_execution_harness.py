@@ -233,3 +233,34 @@ def test_confirmation_gate_prunes_consumed_and_expired_tokens():
     assert expired.token not in gate._tokens
     assert live.token in gate._tokens
     assert len(gate._tokens) == 2
+
+
+def test_harness_audit_events_can_be_filtered_by_task_id():
+    """A shared harness must expose per-task audit isolation.
+
+    A single ``ExecutionHarness`` is sometimes reused across concurrent
+    tasks. The previous ``audit_events`` property returned every recorded
+    event, with no way to slice by ``task_id``; ``audit_events_by_task``
+    is the supported per-task view.
+    """
+    harness = ExecutionHarness()
+    action = CmdRunAction(command='echo x')
+
+    def ok(runtime_action):
+        return CmdOutputObservation(
+            content='x', command=runtime_action.command, exit_code=0
+        )
+
+    harness.execute(action, ok, task_id='t1')
+    harness.execute(action, ok, task_id='t2')
+    harness.execute(action, ok, task_id='t1')
+
+    assert len(harness.audit_events) == 3
+    t1_events = harness.audit_events_by_task('t1')
+    t2_events = harness.audit_events_by_task('t2')
+    assert len(t1_events) == 2
+    assert len(t2_events) == 1
+    assert all(event.task_id == 't1' for event in t1_events)
+    assert t2_events[0].task_id == 't2'
+    # Unknown task returns an empty list, not a copy of all events.
+    assert harness.audit_events_by_task('missing') == []

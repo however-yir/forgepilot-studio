@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import concurrent.futures
 import json
+import threading
 import time
 from datetime import UTC, datetime
 from typing import Callable, Mapping
@@ -239,6 +241,7 @@ class ToolRegistry:
         executor: Callable[[str, Mapping[str, object] | str], str] | None = None,
         trace_id: str | None = None,
         confirmed: bool = False,
+        timeout_seconds: float | None = None,
     ) -> ToolCallRecord:
         entry = self.get_entry(tool_id)
         # CONFIRM tools require an explicit human confirmation on every
@@ -277,26 +280,126 @@ class ToolRegistry:
             )
 
         started = time.perf_counter()
-        try:
-            output = executor(tool_id, parameters)
-            elapsed_ms = int((time.perf_counter() - started) * 1000)
-            return self.record_call(
+        if timeout_seconds is not None and timeout_seconds > 0:
+            return self._invoke_with_timeout(
                 tool_id=tool_id,
                 parameters=parameters,
-                output=output,
-                duration_ms=elapsed_ms,
+                executor=executor,
                 trace_id=trace_id,
+                timeout_seconds=timeout_seconds,
+                started=started,
             )
+
+        try:
+            output = executor(tool_id, parameters)
         except Exception as exc:
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            return self._record_executor_failure(
+                tool_id=tool_id,
+                parameters=parameters,
+                trace_id=trace_id,
+                started=started,
+                elapsed_ms=elapsed_ms,
+                exc=exc,
+            )
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        return self.record_call(
+            tool_id=tool_id,
+            parameters=parameters,
+            output=output,
+            duration_ms=elapsed_ms,
+            trace_id=trace_id,
+        )
+
+    def _invoke_with_timeout(
+        self,
+        *,
+        tool_id: str,
+        parameters: Mapping[str, object] | str,
+        executor: Callable[[str, Mapping[str, object] | str], str],
+        trace_id: str | None,
+        timeout_seconds: float,
+        started: float,
+    ) -> ToolCallRecord:
+        """Run ``executor`` with a wall-clock timeout.
+
+        The executor runs in a daemon thread so a hung tool cannot block
+        the agent loop. We deliberately do not use
+        ``concurrent.futures.ThreadPoolExecutor`` here because its context
+        manager blocks on the worker thread when the pool is closed, and
+        Python cannot interrupt the running executor — so a context-manager
+        shutdown would wait out the full executor runtime on timeout. A
+        detached ``Future`` lets us return immediately on timeout while
+        still surfacing success / exception results through the same
+        audit path. The executor itself is not killed; callers that need
+        hard termination should use ``shell_tools``, which enforces the
+        timeout at the subprocess level.
+        """
+        result_future: concurrent.futures.Future[str] = concurrent.futures.Future()
+
+        def _runner() -> None:
+            try:
+                result_future.set_result(executor(tool_id, parameters))
+            except BaseException as exc:  # noqa: BLE001 - propagate to caller
+                if not result_future.set_running_or_notify_cancel():
+                    return
+                result_future.set_exception(exc)
+
+        thread = threading.Thread(target=_runner, daemon=True)
+        thread.start()
+        try:
+            output = result_future.result(timeout=timeout_seconds)
+        except concurrent.futures.TimeoutError:
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             return self.record_call(
                 tool_id=tool_id,
                 parameters=parameters,
                 output='',
                 duration_ms=elapsed_ms,
-                error=str(exc),
+                error=f'executor timed out after {timeout_seconds}s',
                 trace_id=trace_id,
             )
+        except Exception as exc:
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            return self._record_executor_failure(
+                tool_id=tool_id,
+                parameters=parameters,
+                trace_id=trace_id,
+                started=started,
+                elapsed_ms=elapsed_ms,
+                exc=exc,
+            )
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        return self.record_call(
+            tool_id=tool_id,
+            parameters=parameters,
+            output=output,
+            duration_ms=elapsed_ms,
+            trace_id=trace_id,
+        )
+
+    def _record_executor_failure(
+        self,
+        *,
+        tool_id: str,
+        parameters: Mapping[str, object] | str,
+        trace_id: str | None,
+        started: float,
+        elapsed_ms: int,
+        exc: BaseException,
+    ) -> ToolCallRecord:
+        # Chain the original exception type + message so an audit reader
+        # can identify the root cause without losing the wrapped
+        # exception class name.
+        chained = f'{type(exc).__name__}: {exc}'
+        return self.record_call(
+            tool_id=tool_id,
+            parameters=parameters,
+            output='',
+            duration_ms=elapsed_ms,
+            error=chained,
+            trace_id=trace_id,
+        )
 
     def record_call(
         self,
@@ -332,6 +435,28 @@ class ToolRegistry:
         if tool_id is None:
             return list(self._call_records)
         return [record for record in self._call_records if record.tool_id == tool_id]
+
+    def clear_call_records(self, tool_id: str | None = None) -> int:
+        """Drop recorded call history to bound memory for long-running tasks.
+
+        When ``tool_id`` is given, only records for that tool are dropped.
+        Returns the number of records that were removed. Mock specs and
+        registry entries are kept — only the audit/observability history
+        is affected.
+        """
+        if tool_id is None:
+            dropped = len(self._call_records)
+            self._call_records.clear()
+            return dropped
+        kept: list[ToolCallRecord] = []
+        dropped = 0
+        for record in self._call_records:
+            if record.tool_id == tool_id:
+                dropped += 1
+            else:
+                kept.append(record)
+        self._call_records = kept
+        return dropped
 
     def preview_schema(self, tool_id: str) -> dict[str, object]:
         entry = self.get_entry(tool_id)

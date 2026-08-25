@@ -48,6 +48,10 @@ _SENSITIVE_KEY_PARTS = (
 _INLINE_SECRET_PATTERN = re.compile(
     r'(?i)\b(api[_-]?key|authorization|password|secret|token)\s*[:=]\s*([^\s,;]+)'
 )
+# Match credentials embedded in a URL's userinfo component
+# (https://user:password@host). Captures the userinfo prefix so we can
+# replace it with a redacted marker.
+_URL_USERINFO_PATTERN = re.compile(r'([a-zA-Z][a-zA-Z0-9+.\-]*://)[^/\s@]+:[^/\s@]+@')
 
 
 def redact_payload(value: Any) -> Any:
@@ -65,7 +69,11 @@ def redact_payload(value: Any) -> Any:
     if isinstance(value, tuple):
         return [redact_payload(item) for item in value]
     if isinstance(value, str):
-        return _INLINE_SECRET_PATTERN.sub(r'\1=[REDACTED]', value)
+        scrubbed = _INLINE_SECRET_PATTERN.sub(r'\1=[REDACTED]', value)
+        # Redact URL userinfo AFTER the inline-secret pass so a token-style
+        # password still gets handled consistently.
+        scrubbed = _URL_USERINFO_PATTERN.sub(r'\1[REDACTED]@', scrubbed)
+        return scrubbed
     return value
 
 

@@ -47,6 +47,18 @@ class ExecutionHarness:
     def audit_events(self) -> list[AuditEvent]:
         return list(self._audit_events)
 
+    def audit_events_by_task(self, task_id: str) -> list[AuditEvent]:
+        """Return only the audit events recorded against a single task.
+
+        A single harness instance is sometimes reused across concurrent
+        tasks (e.g. one shared for a multi-task run), so the caller needs
+        a way to slice the buffer by ``task_id`` without copying the full
+        list. Events recorded with ``task_id=None`` (the default ``self.task_id``
+        path) are returned for any non-empty task filter that matches the
+        configured default.
+        """
+        return [event for event in self._audit_events if event.task_id == task_id]
+
     def execute(
         self,
         action: Any,

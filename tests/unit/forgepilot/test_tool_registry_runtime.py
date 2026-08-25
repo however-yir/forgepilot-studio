@@ -154,7 +154,99 @@ def test_build_http_connector_request_from_variables():
     assert request['query_params']['format'] == 'jsonl'
 
 
-def test_mermaid_registry_graph_escapes_labels():
+def test_invoke_live_executor_timeout_records_timeout_error():
+    """A live executor that exceeds ``timeout_seconds`` must be terminated.
+
+    The audit record must report the timeout as an error and a non-zero
+    duration so a hung tool does not silently stall a task. The executor
+    thread itself is not interruptible in Python, but the harness must
+    still surface a clear failure to the caller.
+    """
+    import time
+
+    registry = ToolRegistry.from_builtin_templates()
+    registry.set_mode('connector.github', ToolExecutionMode.LIVE)
+
+    def slow_executor(tool_id: str, params: dict[str, object]) -> str:
+        time.sleep(2.0)
+        return 'late'
+
+    started = time.perf_counter()
+    record = registry.invoke(
+        'connector.github',
+        parameters={'repo': 'x'},
+        executor=slow_executor,
+        confirmed=True,
+        timeout_seconds=0.2,
+    )
+    elapsed = time.perf_counter() - started
+    assert record.error is not None
+    assert 'timed out after 0.2s' in record.error
+    assert record.duration_ms >= 200
+    # Should return well before the 2s executor sleep completes.
+    assert elapsed < 1.5
+
+
+def test_invoke_live_executor_exception_chains_type_name():
+    """Executor exceptions must surface the original exception class name.
+
+    A bare ``str(exc)`` discarded the type, so a ``ValueError`` looked
+    identical to a ``RuntimeError`` in audit logs. The new error format
+    is ``"TypeName: message"`` so reviewers can tell the failure mode
+    at a glance.
+    """
+    registry = ToolRegistry.from_builtin_templates()
+    registry.set_mode('connector.github', ToolExecutionMode.LIVE)
+
+    def bad_executor(tool_id: str, params: dict[str, object]) -> str:
+        raise ValueError('bad input')
+
+    record = registry.invoke(
+        'connector.github',
+        parameters={'repo': 'x'},
+        executor=bad_executor,
+        confirmed=True,
+    )
+    assert record.error is not None
+    assert record.error.startswith('ValueError:')
+    assert 'bad input' in record.error
+
+
+def test_clear_call_records_drops_history_bounded_to_tool():
+    """``clear_call_records`` must bound the audit-history memory for
+    long-running tasks and leave mock / registry state alone.
+    """
+    registry = ToolRegistry.from_builtin_templates()
+    registry.set_mock_response('connector.github', output='gh')
+    registry.set_mock_response('connector.sentry', output='sn')
+
+    registry.invoke('connector.github', parameters={'r': 'a'}, confirmed=True)
+    registry.invoke('connector.sentry', parameters={'r': 'b'}, confirmed=True)
+    registry.invoke('connector.github', parameters={'r': 'c'}, confirmed=True)
+
+    assert len(registry.list_call_records()) == 3
+
+    # Drop only the github records; sentry + mock specs survive.
+    dropped = registry.clear_call_records(tool_id='connector.github')
+    assert dropped == 2
+    remaining = registry.list_call_records()
+    assert len(remaining) == 1
+    assert remaining[0].tool_id == 'connector.sentry'
+    # Mock spec still in place.
+    assert (
+        registry.invoke(
+            'connector.github', parameters={'r': 'd'}, confirmed=True
+        ).output_summary
+        == 'gh'
+    )
+
+
+def test_clear_call_records_with_no_filter_drops_all():
+    registry = ToolRegistry.from_builtin_templates()
+    registry.invoke('connector.github', parameters={'r': 'a'}, confirmed=True)
+    assert registry.clear_call_records() == 1
+    assert registry.list_call_records() == []
+
     """Display names must not be able to break out of Mermaid labels (L-7)."""
     from openhands.forgepilot.tool_registry.enforcement import (
         generate_mermaid_registry_graph,
