@@ -260,7 +260,14 @@ jobs:
 
   update_pr_description:
     name: Update PR Description
-    if: github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && github.event.pull_request.user.login != 'dependabot[bot]'
+    if: |
+      always() && (
+        (github.event_name == 'pull_request' &&
+          !github.event.pull_request.head.repo.fork &&
+          github.actor != 'dependabot[bot]' &&
+          github.event.pull_request.user.login != 'dependabot[bot]') ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      )
     needs: [ghcr_build_runtime]
     runs-on: ubuntu-22.04
     permissions:
@@ -272,7 +279,12 @@ jobs:
 
       - name: Get short SHA
         id: short_sha
-        run: echo "SHORT_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+        run: echo "SHORT_SHA=${RELEVANT_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify runtime build
+        env:
+          RUNTIME_BUILD_RESULT: ${{ needs.ghcr_build_runtime.result }}
+        run: test "$RUNTIME_BUILD_RESULT" = success
 
       - name: Update PR Description
         env:
@@ -282,5 +294,11 @@ jobs:
           SHORT_SHA: ${{ steps.short_sha.outputs.SHORT_SHA }}
         shell: bash
         run: |
-          echo "Updating PR description with Docker and uvx commands"
-          bash ${GITHUB_WORKSPACE}/.github/scripts/update_pr_description.sh
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            echo "Updating PR description with Docker and uvx commands"
+            bash "${GITHUB_WORKSPACE}/.github/scripts/update_pr_description.sh"
+          else
+            echo "No PR context on main; validating the PR description updater script."
+            test -f "${GITHUB_WORKSPACE}/.github/scripts/update_pr_description.sh"
+            bash -n "${GITHUB_WORKSPACE}/.github/scripts/update_pr_description.sh"
+          fi
