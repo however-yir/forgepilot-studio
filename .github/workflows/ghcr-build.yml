@@ -279,6 +279,8 @@ jobs:
 
       - name: Get short SHA
         id: short_sha
+        env:
+          RELEVANT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: echo "SHORT_SHA=${RELEVANT_SHA:0:7}" >> "$GITHUB_OUTPUT"
 
       - name: Verify runtime build
