@@ -140,6 +140,6 @@ jobs:
       - name: Validate coverage artifacts on main
         if: github.event_name == 'push'
         run: |
-          test -s ".coverage.3.12"
-          test -s ".coverage.runtime.3.12"
-          test -s ".coverage.enterprise.3.12"
+          test -s ".coverage."
+          test -s ".coverage.runtime."
+          test -s ".coverage.enterprise."
